@@ -1,0 +1,45 @@
+# ==============================================================================
+# Fly.io App Configuration — IMARA ONE Search Backend
+# https://fly.io/docs/reference/configuration/
+# ==============================================================================
+
+app = "imara-one-backend"
+primary_region = "syd"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ENVIRONMENT = "production"
+  BACKEND_HOST = "0.0.0.0"
+  BACKEND_PORT = "8000"
+  PORT = "8000"
+  AI_ENABLED = "false"
+  PRIVACY_DEFAULT_RAW_QUERY_LOGGING = "false"
+  PRIVACY_DEFAULT_IP_STORAGE = "false"
+  SECURITY_STRICT_SSRF_ENFORCEMENT = "true"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+[[http_service.checks]]
+  grace_period = "15s"
+  interval = "30s"
+  method = "GET"
+  timeout = "5s"
+  path = "/api/v1/health"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
