@@ -400,28 +400,24 @@ class SearchService:
                 pass
 
         # 3. Tertiary fallback: Open Web Article & News Feed
-        if len(web_hits) < 3:
+        if len(web_hits) < limit:
             try:
                 feed_url = f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=en-US&gl=US&ceid=US:en"
                 with httpx.Client(timeout=3.5, headers=headers) as client:
                     resp = client.get(feed_url, follow_redirects=True)
                     if resp.status_code == 200:
-                        soup = BeautifulSoup(resp.text, "html.parser")
-                        items = soup.find_all("item")
-                        for item in items[: limit - len(web_hits)]:
-                            title_el = item.find("title")
-                            link_el = item.find("link")
-                            desc_el = item.find("description")
-                            pub_el = item.find("pubdate")
+                        chunks = resp.text.split("<item")[1:]
+                        for chunk in chunks[: limit - len(web_hits)]:
+                            raw_title = chunk.split("<title>")[1].split("</title>")[0] if "<title>" in chunk else ""
+                            raw_link = chunk.split("<link>")[1].split("</link>")[0] if "<link>" in chunk else ""
+                            raw_desc = chunk.split("<description>")[1].split("</description>")[0] if "<description>" in chunk else ""
+                            raw_pub = chunk.split("<pubDate>")[1].split("</pubDate>")[0] if "<pubDate>" in chunk else None
 
-                            if not title_el or not link_el:
+                            if not raw_title or not raw_link:
                                 continue
 
-                            title = title_el.get_text(strip=True)
-                            raw_link = link_el.get_text(strip=True)
-                            raw_desc = desc_el.get_text(strip=True) if desc_el else ""
-                            clean_desc = re.sub(r"<[^>]+>", "", raw_desc)
-                            pub_date = pub_el.get_text(strip=True) if pub_el else None
+                            clean_title = re.sub(r"<[^>]+>", "", raw_title).replace("&amp;", "&").replace("&quot;", '"')
+                            clean_desc = re.sub(r"<[^>]+>", "", raw_desc).replace("&amp;", "&").replace("&quot;", '"')
                             domain = self._extract_domain(raw_link) or "news.google.com"
                             shield_info = shield_analyzer.analyze_url(raw_link)
 
@@ -429,12 +425,12 @@ class SearchService:
                                 SearchHit(
                                     id=hashlib.md5(raw_link.encode()).hexdigest(),
                                     url=raw_link,
-                                    title=title,
-                                    snippet=clean_desc or title,
+                                    title=clean_title,
+                                    snippet=clean_desc or clean_title,
                                     meta_description=clean_desc,
                                     domain=domain,
                                     score=0.93,
-                                    published_date=pub_date,
+                                    published_date=raw_pub,
                                     is_safe=shield_info["shield_status"] != "SUSPICIOUS",
                                     shield_score=shield_info["shield_score"],
                                     shield_status=shield_info["shield_status"],
